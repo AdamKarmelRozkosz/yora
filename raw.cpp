@@ -4,27 +4,24 @@
 #include <unistd.h>
 #include <iostream>
 #include "keymap.h"
-termios termios_ori;
+struct termios termios_ori;
 
 void die(const char *s){ //error handling
     perror(s); // seeks for the global variable errno to chech whether there was an error
     exit(1);
 }
 void DisableRawMode(){
-      tcsetattr(STDIN_FILENO, TCSAFLUSH, &termios_ori);
-
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &termios_ori) == -1)
         die("tcsetattr");
 }
 
 void EnableRawMode(){
-    if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &termios_ori) == -1)
+    if (tcgetattr(STDIN_FILENO, &termios_ori) == -1)
         die("tcsetattr");
 
-    tcgetattr(STDIN_FILENO, &termios_ori);
     atexit(DisableRawMode); // w use atexit from cstdlib to activate oru function our program stops.
 
-    termios raw = termios_ori;
+    struct termios raw = termios_ori;
     tcgetattr(STDIN_FILENO, &raw);
     raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN); 
     // ECHO- Disables the echo mode
@@ -39,16 +36,15 @@ void EnableRawMode(){
     // INPCK - Enables parity checking(kind of deprecated)
     // ISTRIP - Causes the 8th bit of of input to be set to 0
 
-    raw.c_lflag &= ~(OPOST); 
-    // OPOST - Disables output processing 
+    raw.c_oflag &= ~(OPOST); 
+    // OPOST - Diables output processing 
 
-    raw.c_cflag |= ~(CS8);
+    raw.c_cflag |= (CS8);
     // CS8 - Sets the character size to 8 bit 
 
     raw.c_cc[VMIN] = 0;
     raw.c_cc[VTIME] = 1;
 
-    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
         die("tcsetattr");
 }
