@@ -26,23 +26,23 @@ void EnableRawMode(){
 
     termios raw = termios_ori;
     tcgetattr(STDIN_FILENO, &raw);
-    raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN | BRKINT | INPCK | ISTRIP); 
+    raw.c_lflag &= ~(ECHO | ICANON | ISIG | IEXTEN); 
     // ECHO- Disables the echo mode
     // ICANON - Disables canonical mode
     // ISIG - Disables Ctrl-C and Ctrl-Z
     // IEXTEN - Fixes Ctrl-V and Ctrl-C by also fixes Ctrl-O on Mac 
+    
+    raw.c_iflag &= ~(ICRNL | IXON | BRKINT | INPCK | ISTRIP); 
+    // ICRNL - Disables the Ctrl-S and Ctrl-Q
+    // IXON - Disables carriage return
     // BRKINT - A break condidion will end the program
     // INPCK - Enables parity checking(kind of deprecated)
     // ISTRIP - Causes the 8th bit of of input to be set to 0
-    
-    raw.c_iflag &= ~(ICRNL | IXON); 
-    // ICRNL - Disables the Ctrl-S and Ctrl-Q
-    // IXON - Disables carriage return
 
     raw.c_lflag &= ~(OPOST); 
     // OPOST - Disables output processing 
 
-    raw.c_cflag &= ~(CS8);
+    raw.c_cflag |= ~(CS8);
     // CS8 - Sets the character size to 8 bit 
 
     raw.c_cc[VMIN] = 0;
