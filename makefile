@@ -13,3 +13,10 @@ $(TARGET): $(SRC)
 # Clean Rule (Deletes the executable)
 clean:
 	rm -f $(TARGET)
+# Install the file to PATH
+install: $(TARGET)
+	cp $(TARGET) /usr/local/bin/$(TARGET)
+
+# Uninstall: Removes the file
+uninstall:
+	rm -f /usr/local/bin/$(TARGET)

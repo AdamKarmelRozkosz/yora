@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <iostream>
+#include "keymap.h"
 termios termios_ori;
 
 void die(const char *s){ //error handling
@@ -50,4 +51,26 @@ void EnableRawMode(){
     tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
         die("tcsetattr");
+}
+char ReadMode(){
+    int uread;
+    char c;
+    while ((uread=read(STDIN_FILENO, &c, 1)) !=1){
+        if(uread == -1){
+            die("read");
+        }
+    }
+    return c;
+}
+void Keypress(){
+    char c = ReadMode();
+    switch (c) {
+    case CTRL_KEY('q'):
+        exit(0);
+        break;
+    }
+}
+void clear(){
+    write(STDOUT_FILENO, "\x1b[2J", 4);  
+    write(STDOUT_FILENO, "\x1b[H", 3);
 }
