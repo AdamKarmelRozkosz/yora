@@ -4,7 +4,7 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -O2
 
 # File Names
 TARGET = yora
-SRC = yora.cpp raw.cpp
+SRC = yora.cpp editor.cpp
 
 # Build Rule (The default)
 $(TARGET): $(SRC)

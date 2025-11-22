@@ -3,14 +3,14 @@
 #include <cstdlib>
 #include <cctype>
 #include <iostream>
-#include "raw.h"
+#include "editor.h"
 #include "keymap.h"
 
 int main(){ 
     EnableRawMode();
-    
+    Editor();
     while (true){
-        clear();
+        ScreenRefresh();
         Keypress();
     }
    /* char c = '\0'; 
