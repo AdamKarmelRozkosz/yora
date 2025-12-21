@@ -1,6 +1,7 @@
 #ifndef KEYMAP_H
 #define KEYMAP_H
 #define CTRL_KEY(k) ((k) & 0x1f)
+#include "editor.h"
 enum EditorKey {
   CTRL_H = 8,
   CTRL_Q = 17,
@@ -16,5 +17,5 @@ enum EditorKey {
   PAGE_UP,
   PAGE_DOWN
 };
-void EditorMoveCursor(int key);
+void EditorMoveCursor(EditorConfig& E, int key);
 #endif 

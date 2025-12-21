@@ -11,8 +11,7 @@
 #include <ctime> // time 
 #include <cstdarg> // required for va_list and printf like printing
 
-struct EditorConfig E; // config variable
-
+EditorConfig E;
 void die(const char *s){ //error handling
     write(STDOUT_FILENO, "\x1b[2J", 4); //x1b == 'esc' in ANSI 
     write(STDOUT_FILENO, "\x1b[H", 3); 
@@ -21,16 +20,16 @@ void die(const char *s){ //error handling
     exit(1);
 }
 
-void DisableRawMode(){
+void DisableRawMode(EditorConfig& E){
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.termios_ori) == -1) // goes back to the previous terminal settings
         die("tcsetattr"); 
 }
 
-void EnableRawMode(){
+void EnableRawMode(EditorConfig& E){
     if (tcgetattr(STDIN_FILENO, &E.termios_ori) == -1) 
         die("tcsetattr");
 
-    atexit(DisableRawMode); // w use atexit from cstdlib to activate oru function our program stops.
+    //no longer works with the reference passing atexit(DisableRawMode); // w use atexit from cstdlib to activate oru function our program stops.
 
     struct termios raw = E.termios_ori;
     tcgetattr(STDIN_FILENO, &raw);
@@ -107,7 +106,7 @@ int ReadMode(){
     return c;
   }
 }
-void EditorScroll(){
+void EditorScroll(EditorConfig& E){
     if (E.cy < E.rowoff){ // vertical scrolling
         E.rowoff = E.cy;
     }
@@ -121,7 +120,7 @@ void EditorScroll(){
         E.coloff = E.cx - E.screencols +1;
     }
 }
-int EditorRowCxToRxConverter(const std::string &row, int cx){ // converts to render index which helps with the rendering of tabs
+int EditorRowCxToRxConverter(EditorConfig& E, const std::string &row, int cx){ // converts to render index which helps with the rendering of tabs
     int rx = 0;
     for (int j = 0; j < cx; j++) {
         if (row[j] == '\t') {
@@ -131,23 +130,36 @@ int EditorRowCxToRxConverter(const std::string &row, int cx){ // converts to ren
     }
     return rx;
 }
-void EditorRowInsertChar(std::string& row, int at, int c) { // inserts a character into a row string
+int EditorRowRxToCx(EditorConfig& E, const std::string& row, int rx) {
+    int cur_rx = 0;
+    int cx;
+    for (cx = 0; cx < (int)row.length(); cx++) {
+        if (row[cx] == '\t')
+            cur_rx += (E.tabstop - 1) - (cur_rx % E.tabstop);
+        
+        cur_rx++;
+
+        if (cur_rx > rx) return cx;
+    }
+    return cx;
+}
+void EditorRowInsertChar(EditorConfig& E, std::string& row, int at, int c) { // inserts a character into a row string
     if (at < 0 || at > (int)row.length()) at = row.length();
     row.insert(at, 1, (char)c);
     E.dirty++; // check whether the file was modified
 }
 
 
-void EditorInsertChar(int c) { // helps insert character at the current cursor position
+void EditorInsertChar(EditorConfig& E,int c) { // helps insert character at the current cursor position
     if (E.cy == (int)E.rows.size()) {
         E.rows.push_back("");
     }
     
-    EditorRowInsertChar(E.rows[E.cy], E.cx, c);
+    EditorRowInsertChar(E, E.rows[E.cy], E.cx, c);
     
     E.cx++;
 }
-void EditorInsertNewLine() { // inserts newline and goes to the next row
+void EditorInsertNewLine(EditorConfig& E) { // inserts newline and goes to the next row
     if (E.cx == 0) {
         E.rows.insert(E.rows.begin() + E.cy, "");
     } else {
@@ -160,7 +172,7 @@ void EditorInsertNewLine() { // inserts newline and goes to the next row
     E.cx = 0;
     E.dirty++;
 }
-void EditorDelChar() { // deletes the characters from the file
+void EditorDelChar(EditorConfig& E) { // deletes the characters from the file
     if (E.cy == (int)E.rows.size()) return;
     if (E.cx == 0 && E.cy == 0) return;
 
@@ -177,7 +189,7 @@ void EditorDelChar() { // deletes the characters from the file
     }
     E.dirty++;
 }
-void DrawRows(std::string& ab){ // function used for drawing the TUI 
+void DrawRows(EditorConfig& E, std::string& ab){ // function used for drawing the TUI 
     int y;
     for (y = 0; y < E.screenrows; y++){
         int filerow = y + E.rowoff;
@@ -233,7 +245,7 @@ void DrawRows(std::string& ab){ // function used for drawing the TUI
             ab += "\r\n"; // newline
         }
     }
-void StatusBar(std::string& ab){
+void StatusBar(EditorConfig& E, std::string& ab){
     ab += "\x1b[7m"; // inverts colors 
                      //
     std::string status = E.filename.empty() ? "[No Name]" : E.filename;
@@ -260,7 +272,7 @@ void StatusBar(std::string& ab){
     ab += "\x1b[m"; // resets colors
     ab += "\r\n";   
 }
-void EditorSetStatusMessage(const char *fmt, ...) {
+void EditorSetStatusMessage(EditorConfig& E, const char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     char buf[80];
@@ -270,7 +282,7 @@ void EditorSetStatusMessage(const char *fmt, ...) {
     E.statusmsg = buf;
     E.statusmsgtime = time(NULL);}
 
-void DrawMessageBar(std::string& ab) {
+void DrawMessageBar(EditorConfig& E, std::string& ab) {
     ab += "\x1b[K"; //clears the line
     int msglen = E.statusmsg.length();
     if (msglen > E.screencols) msglen = E.screencols;
@@ -278,20 +290,20 @@ void DrawMessageBar(std::string& ab) {
         ab += E.statusmsg.substr(0, msglen);
     }
 }
-void ScreenRefresh(){ // main function that combines all the visual functions
-    EditorScroll(); // lets the user scroll
+void ScreenRefresh(EditorConfig& E){ // main function that combines all the visual functions
+    EditorScroll(E); // lets the user scroll
     std::string ab; // string buffer
     
     ab += "\x1b[?25l"; // hide cursor
     ab += "\x1b[H"; // move cursor "HOME"
 
-    DrawRows(ab);
-    StatusBar(ab);
-    DrawMessageBar(ab);
+    DrawRows(E,ab);
+    StatusBar(E,ab);
+    DrawMessageBar(E,ab);
 
     int rx = E.cx; // function that calculates the cursor position relative to tabs
     if (E.cy < (int)E.rows.size()) {
-        rx = EditorRowCxToRxConverter(E.rows[E.cy], E.cx);
+        rx = EditorRowCxToRxConverter(E,E.rows[E.cy], E.cx);
     }
     // move cursor comand
     ab += "\x1b[" + std::to_string((E.cy -E.rowoff) + 1) + ";" + std::to_string((rx - E.coloff) + 1) + "H";
@@ -309,7 +321,7 @@ int GetWindowSize(int *rows, int *cols){ // gets the windows size
         return 0;
     }
 }
-void OpenEditor(const std::string& filename){ // function that alows us to open the file with an editor 
+void OpenEditor(EditorConfig& E, const std::string& filename){ // function that alows us to open the file with an editor 
     E.filename = filename;
     std::ifstream file(filename);
     
@@ -325,26 +337,26 @@ void OpenEditor(const std::string& filename){ // function that alows us to open 
         E.rows.push_back(line);
     }
 }
-std::string EditorPrompt(std::string prompt) {
+std::string EditorPrompt(EditorConfig& E,std::string prompt) {
     std::string buf = "";
 
     while (true) {
         // Display the prompt and the current buffer content
-        EditorSetStatusMessage(prompt.c_str(), buf.c_str());
-        ScreenRefresh();
+        EditorSetStatusMessage(E, prompt.c_str(), buf.c_str());
+        ScreenRefresh(E);
 
         int c = ReadMode();
 
         // Confirm with Enter
         if (c == '\r') {
             if (buf.length() != 0) {
-                EditorSetStatusMessage(""); // Clear message
+                EditorSetStatusMessage(E, ""); // Clear message
                 return buf;
             }
         } 
         // Cancel with Escape
         else if (c == '\x1b') {
-            EditorSetStatusMessage("");
+            EditorSetStatusMessage(E, "");
             return ""; 
         } 
         // Handle Backspace
@@ -358,11 +370,11 @@ std::string EditorPrompt(std::string prompt) {
     }
 }
 
-void EditorSave(){  // option to save the file 
+void EditorSave(EditorConfig& E) {  // option to save the file 
     if (E.filename.empty()) {
-        E.filename = EditorPrompt("Save as: %s (ESC to cancel)");
+        E.filename = EditorPrompt(E, "Save as: %s (ESC to cancel)");
         if (E.filename.empty()) {
-            EditorSetStatusMessage("Save aborted");
+            EditorSetStatusMessage(E, "Save aborted");
             return;
         }
     }
@@ -373,31 +385,59 @@ void EditorSave(){  // option to save the file
             file << row << "\n";
         }
         E.dirty = 0; // clears the dirty buffer 
-        EditorSetStatusMessage("Saved file: %s (%d lines)", E.filename.c_str(), (int)E.rows.size()); // prints out the message of the saving
+        EditorSetStatusMessage(E, "Saved file: %s (%d lines)", E.filename.c_str(), (int)E.rows.size()); // prints out the message of the saving
     } else {
-        EditorSetStatusMessage("Can't save! I/O error: %s", E.filename.c_str());
+        EditorSetStatusMessage(E, "Can't save! I/O error: %s", E.filename.c_str());
     }}
-
-void Keypress(){
+void EditorFind(EditorConfig& E){
+    std::string query = EditorPrompt(E,"Search: %s (esc to cancel)");
+    int CurPosCx = E.cx;
+    int CurPosCy = E.cy;
+    int CurRowOff = E.rowoff;
+    int CurColOff = E.coloff;
+    if (query.empty()){
+        E.cx = CurPosCx;
+        E.cy = CurPosCy;
+        E.rowoff = CurRowOff;
+        E.coloff = CurColOff;
+        return;
+    }
+    for(int i = 0; i < (int)E.rows.size(); i++){
+        size_t match = E.rows[i].find(query);
+        if (match != std::string::npos){
+            E.cy = i;
+            E.cx = match;
+            E.rowoff = E.cy;
+            E.coloff = 0;
+            EditorSetStatusMessage(E, "Found %s", query.c_str());
+            break;
+        }
+    }
+}
+void Keypress(EditorConfig& E){
     static int quit_times = 3;
     int c = ReadMode();
     switch (c) {
     case '\r': // enter key 
-        EditorInsertNewLine();
+        EditorInsertNewLine(E);
         break;
     case CTRL_KEY('s'):
-        EditorSave();
+        EditorSave(E);
         break;
     case CTRL_KEY('q'):
         if (E.dirty && quit_times > 0) { // checks whether there are no unsaved changes and desnt let the user close the file if it is not
-            EditorSetStatusMessage("WARNING!!! File has unsaved changes. "
+            EditorSetStatusMessage(E,"WARNING!!! File has unsaved changes. "
                                    "Press Ctrl-Q %d more times to quit.", quit_times);
             quit_times--;
             return; 
         }
         write(STDOUT_FILENO, "\x1b[2J", 4); // Escape sequence that errases entire screen
         write(STDOUT_FILENO, "\x1b[H", 3); // Escape sequence that moves cursor to the home position
+        DisableRawMode(E);
         exit(0);
+        break;
+    case CTRL_KEY('f'):
+        EditorFind(E);
         break;
     // case 'h':
     case ARROW_LEFT:
@@ -407,7 +447,7 @@ void Keypress(){
     case ARROW_UP:
     // case 'j':
     case ARROW_DOWN:
-        EditorMoveCursor(c);
+        EditorMoveCursor(E,c);
         break;
     case PAGE_UP:
     case PAGE_DOWN:
@@ -426,13 +466,13 @@ void Keypress(){
         break;
     case BACKSPACE:
     case DEL_KEY:
-        EditorDelChar();
+        EditorDelChar(E);
         break;
     case '\x1b':
         break;
     default:
         if(!iscntrl(c) || c == '\t'){ // allows user to type in the editor
-            EditorInsertChar(c);
+            EditorInsertChar(E,c);
         }
         break;
     }
@@ -440,14 +480,14 @@ void Keypress(){
         quit_times = 3;
     }
 }
-void Editor(){ // initializing the editor
+void Editor(EditorConfig& E){ // initializing the editor
     E.cx = 0;
     E.cy = 0;
     E.numrows = 0;
     E.rowoff = 0;
     E.coloff = 0;
     E.dirty = 0;
-    if (GetWindowSize(&E.screenrows, &E.screencols) == -1){
+    if (GetWindowSize( &E.screenrows, &E.screencols) == -1){
         die("GetWindowSize");
     }
     E.screenrows -= 2;
