@@ -2,10 +2,6 @@
 #include "editor.h"
 void EditorMoveCursor(EditorConfig& E,int key){
     std::string* row = (E.cy >= (int)E.rows.size()) ? nullptr : &E.rows[E.cy];
-    int rx = E.cx;
-    if (row){
-        rx = EditorRowRxToCxConverter(E, *row, E.cx);
-    }
     switch(key){
         case 'h':
         case ARROW_LEFT:

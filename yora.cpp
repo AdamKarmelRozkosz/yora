@@ -9,7 +9,7 @@ int main(int argc, char* argv[]){
     if (argc>=2){
         OpenEditor(E, argv[1]);
     }
-    EditorSetStatusMessage(E,"HELP: Ctrl-S = save | Ctrl-Q = quit");
+    EditorSetStatusMessage(E,"HELP: Ctrl-S = save | Ctrl-Q = quit | Ctrl-F = search");
     while (true){
         ScreenRefresh(E);
         Keypress(E);

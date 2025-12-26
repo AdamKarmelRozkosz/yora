@@ -13,7 +13,8 @@ struct EditorConfig {
     int rowoff = 0;
     int coloff = 0;
     int tabstop = 8;
-    int dirty = 0; 
+    int dirty = 0;
+    int rx = 0;
     
     std::vector<std::string> rows;
     std::string filename;

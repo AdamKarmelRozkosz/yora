@@ -106,20 +106,7 @@ int ReadMode(){
     return c;
   }
 }
-void EditorScroll(EditorConfig& E){
-    if (E.cy < E.rowoff){ // vertical scrolling
-        E.rowoff = E.cy;
-    }
-    if (E.cy >= E.rowoff + E.screenrows){
-            E.rowoff = E.cy - E.screenrows + 1;
-    }
-    if (E.cx < E.coloff){ //horizontal scrolling 
-        E.coloff = E.cx;
-    }
-    if (E.cx >= E.coloff + E.screencols){
-        E.coloff = E.cx - E.screencols +1;
-    }
-}
+
 int EditorRowCxToRxConverter(EditorConfig& E, const std::string &row, int cx){ // converts to render index which helps with the rendering of tabs
     int rx = 0;
     for (int j = 0; j < cx; j++) {
@@ -130,7 +117,7 @@ int EditorRowCxToRxConverter(EditorConfig& E, const std::string &row, int cx){ /
     }
     return rx;
 }
-int EditorRowRxToCx(EditorConfig& E, const std::string& row, int rx) {
+int EditorRowRxToCxConverter(EditorConfig& E, const std::string& row, int rx) {
     int cur_rx = 0;
     int cx;
     for (cx = 0; cx < (int)row.length(); cx++) {
@@ -143,12 +130,30 @@ int EditorRowRxToCx(EditorConfig& E, const std::string& row, int rx) {
     }
     return cx;
 }
+
+void EditorScroll(EditorConfig& E){
+    E.rx = 0;
+    if(E.cy < (int)E.rows.size()){
+        E.rx = EditorRowCxToRxConverter(E, E.rows[E.cy], E.cx);
+    }
+    if (E.cy < E.rowoff){ // vertical scrolling
+        E.rowoff = E.cy;
+    }
+    if (E.cy >= E.rowoff + E.screenrows){
+            E.rowoff = E.cy - E.screenrows + 1;
+    }
+    if (E.rx < E.coloff){ //horizontal scrolling 
+        E.coloff = E.rx;
+    }
+    if (E.rx >= E.coloff + E.screencols){
+        E.coloff = E.rx - E.screencols +1;
+    }
+}
 void EditorRowInsertChar(EditorConfig& E, std::string& row, int at, int c) { // inserts a character into a row string
     if (at < 0 || at > (int)row.length()) at = row.length();
     row.insert(at, 1, (char)c);
     E.dirty++; // check whether the file was modified
 }
-
 
 void EditorInsertChar(EditorConfig& E,int c) { // helps insert character at the current cursor position
     if (E.cy == (int)E.rows.size()) {
@@ -406,9 +411,10 @@ void EditorFind(EditorConfig& E){
         size_t match = E.rows[i].find(query);
         if (match != std::string::npos){
             E.cy = i;
-            E.cx = match;
+            E.cx = match;;
             E.rowoff = E.cy;
-            E.coloff = 0;
+            E.coloff = EditorRowCxToRxConverter(E, E.rows[i], E.cx);
+
             EditorSetStatusMessage(E, "Found %s", query.c_str());
             break;
         }
