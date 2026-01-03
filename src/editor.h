@@ -4,6 +4,10 @@
 #include <termios.h>
 #include <vector>
 
+enum EdtiorMode {
+    NORMAL_MODE,
+    INSERT_MODE
+};
 struct EditorConfig {
     int screenrows = 0;
     int screencols = 0;
@@ -15,6 +19,8 @@ struct EditorConfig {
     int tabstop = 8;
     int dirty = 0;
     int rx = 0;
+    int mode;
+    bool readonly;
     
     std::vector<std::string> rows;
     std::string filename;
@@ -27,6 +33,7 @@ void die(const char *s);
 void DisableRawMode(EditorConfig& E);
 void EnableRawMode(EditorConfig& E);
 int ReadMode();
+bool IsSeparator(int c);
 void Keypress(EditorConfig& E);
 void EditorScroll(EditorConfig& E);
 void StatusBar(EditorConfig& E, std::string& ab);

@@ -58,7 +58,6 @@ void EnableRawMode(EditorConfig& E){
     if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
         die("tcsetattr");
 }
-
 int ReadMode(){
     int uread; //stands for user read
     char c;
@@ -106,7 +105,9 @@ int ReadMode(){
     return c;
   }
 }
-
+bool IsSeparator(int c){
+    return std::isspace(c) || std::ispunct(c) || c == '\0';
+}
 int EditorRowCxToRxConverter(EditorConfig& E, const std::string &row, int cx){ // converts to render index which helps with the rendering of tabs
     int rx = 0;
     for (int j = 0; j < cx; j++) {
@@ -252,13 +253,21 @@ void DrawRows(EditorConfig& E, std::string& ab){ // function used for drawing th
     }
 void StatusBar(EditorConfig& E, std::string& ab){
     ab += "\x1b[7m"; // inverts colors 
-                     //
+    std::string strmode;              
+    if (E.mode == NORMAL_MODE){
+        if (E.readonly) strmode = " -- READ ONLY --";
+        else strmode = " -- NORMAL -- ";
+    } else if (E.mode == INSERT_MODE){
+        strmode = " -- INSERT -- ";
+    }
+    ab += strmode;
+
     std::string status = E.filename.empty() ? "[No Name]" : E.filename;
     status += " - " + std::to_string(E.rows.size()) + " lines";
 
     if (E.dirty) status += " (modified)"; // displays whether the file was modified
 
-    int len = status.length();
+    int len = status.length()+ strmode.length();
     if (len > E.screencols) len = E.screencols;
     ab += status.substr(0, len);
 
@@ -346,29 +355,24 @@ std::string EditorPrompt(EditorConfig& E,std::string prompt) {
     std::string buf = "";
 
     while (true) {
-        // Display the prompt and the current buffer content
         EditorSetStatusMessage(E, prompt.c_str(), buf.c_str());
         ScreenRefresh(E);
 
         int c = ReadMode();
 
-        // Confirm with Enter
         if (c == '\r') {
             if (buf.length() != 0) {
                 EditorSetStatusMessage(E, ""); // Clear message
                 return buf;
             }
         } 
-        // Cancel with Escape
         else if (c == '\x1b') {
             EditorSetStatusMessage(E, "");
             return ""; 
         } 
-        // Handle Backspace
         else if (c == BACKSPACE || c == CTRL_KEY('h') || c == DEL_KEY) {
             if (!buf.empty()) buf.pop_back();
         } 
-        // Append typed characters
         else if (!iscntrl(c) && c < 128) {
             buf += (char)c;
         }
@@ -423,64 +427,204 @@ void EditorFind(EditorConfig& E){
 void Keypress(EditorConfig& E){
     static int quit_times = 3;
     int c = ReadMode();
-    switch (c) {
-    case '\r': // enter key 
-        EditorInsertNewLine(E);
-        break;
-    case CTRL_KEY('s'):
-        EditorSave(E);
-        break;
-    case CTRL_KEY('q'):
+    if (c == CTRL_KEY('q')){
         if (E.dirty && quit_times > 0) { // checks whether there are no unsaved changes and desnt let the user close the file if it is not
             EditorSetStatusMessage(E,"WARNING!!! File has unsaved changes. "
                                    "Press Ctrl-Q %d more times to quit.", quit_times);
             quit_times--;
-            return; 
+            return;
         }
         write(STDOUT_FILENO, "\x1b[2J", 4); // Escape sequence that errases entire screen
         write(STDOUT_FILENO, "\x1b[H", 3); // Escape sequence that moves cursor to the home position
         DisableRawMode(E);
         exit(0);
-        break;
-    case CTRL_KEY('f'):
+    }
+    if (c == CTRL_KEY('s')){
+        EditorSave(E);
+    }
+    if ( c == CTRL_KEY('f')){
         EditorFind(E);
-        break;
-    // case 'h':
-    case ARROW_LEFT:
-    // case 'l':
-    case ARROW_RIGHT:
-    // case 'k':
-    case ARROW_UP:
-    // case 'j':
-    case ARROW_DOWN:
-        EditorMoveCursor(E,c);
-        break;
-    case PAGE_UP:
-    case PAGE_DOWN:
-        if (c == PAGE_UP){
-            E.cy = E.rowoff;
-            break;
-        } else if (c == PAGE_DOWN){
-            E.cy = E.rowoff + E.screenrows -1;
-            break;
+    }
+    if (E.mode == INSERT_MODE){
+        if (c == '\x1b'){
+            E.mode = NORMAL_MODE;
+            if (E.cx > 0 ){
+                E.cx--;
+            }
+            return;
         }
-    case HOME_KEY:
-        E.cx = 0;
-        break;
-    case END_KEY:
-        E.cx = E.rows[E.cy].length();
-        break;
-    case BACKSPACE:
-    case DEL_KEY:
-        EditorDelChar(E);
-        break;
-    case '\x1b':
-        break;
-    default:
-        if(!iscntrl(c) || c == '\t'){ // allows user to type in the editor
-            EditorInsertChar(E,c);
+    }
+    if (E.mode == NORMAL_MODE){
+        switch(c){
+            case 'i':
+                if (E.readonly){
+                    EditorSetStatusMessage(E, "Warning: File is read-only");
+                    return;
+                }
+                E.mode = INSERT_MODE;
+                break;
+            case 'a':
+                if (E.readonly){
+                    EditorSetStatusMessage(E, "Warning: File is read-only");
+                    return;
+                }
+
+                if (E.cy < (int)E.rows.size()){
+                    if (E.rows[E.cy].length() > 0) {
+                        E.cx++;
+                    }
+                }
+                E.mode = INSERT_MODE;
+                break;
+            case 'o':
+                if (E.readonly){
+                    EditorSetStatusMessage(E, "Warning: File is read-only");
+                    return;
+                }
+
+                if (E.cy < (int)E.rows.size()){
+                    E.cx = E.rows[E.cy].length();
+                }
+                EditorInsertNewLine(E);
+                E.mode = INSERT_MODE;
+                break;
+            case 'O':
+                if (E.readonly){
+                    EditorSetStatusMessage(E, "Warning: File is read-only");
+                    return;
+                }
+
+                E.rows.insert(E.rows.begin() + E.cy, "");
+                E.cx = 0;
+                E.dirty++;
+                E.mode = INSERT_MODE;
+                break;
+            case 'w':
+                if (E.cy >= (int)E.rows.size()){
+                    break;
+                }
+                while (E.cx < (int)E.rows[E.cy].length() && !IsSeparator(E.rows[E.cy][E.cx])){
+                    E.cx++;
+                }
+                while (true){
+                    if(E.cx >= (int)E.rows[E.cy].length()){
+                        if(E.cy < (int)E.rows.size()-1){
+                            E.cy++;
+                            E.cx = 0;
+                        } else {
+                            break;
+                        }
+                    } else if (IsSeparator(E.rows[E.cy][E.cx])){
+                        E.cx++;
+                    } else {
+                        break;
+                    }
+                }
+                break;
+            case 'b':
+                if (E.cx == 0){
+                    if (E.cy > 0){
+                        E.cy--;
+                        E.cx = E.rows[E.cy].length(); // Go to end of prev line
+                    }
+                } else{
+                    E.cx--;
+                }
+                while (true){
+                    if (E.cx == 0){
+                        if (E.cy > 0){
+                            E.cy--;
+                            E.cx = E.rows[E.cy].length();
+                        } else {
+                            break; 
+                        }
+                    }
+                    char c = (E.cx >= (int)E.rows[E.cy].length()) ? ' ' : E.rows[E.cy][E.cx];
+                    if (!IsSeparator(c)){
+                        break; 
+                    }
+                    E.cx--;
+                }
+                while (E.cx > 0){
+                    char PrevChar = E.rows[E.cy][E.cx - 1];
+                    if (IsSeparator(PrevChar)){
+                        break; 
+                    }
+                    E.cx--;
+                }
+                break;
+            case 'h':
+            case ARROW_LEFT:
+            case 'j':
+            case ARROW_DOWN:
+            case 'k':
+            case ARROW_UP:
+            case 'l':
+            case ARROW_RIGHT:
+            EditorMoveCursor(E,c);
+            break;
+
+            case 'x':
+                if (E.readonly){
+                    EditorSetStatusMessage(E, "Warning: File is read-only");
+                    return;
+                }
+                if (E.cy == (int)E.rows.size()) break; 
+                if (E.rows[E.cy].empty()) break;
+
+                if (E.cx >= (int)E.rows[E.cy].length()) {
+                    E.cx = E.rows[E.cy].length() - 1;
+                }
+
+                E.rows[E.cy].erase(E.cx, 1);
+                
+                E.dirty++;
+
+                if (E.cx == (int)E.rows[E.cy].length() && E.cx > 0) {
+                    E.cx--;
+                }
+                break;
+                }
+    } else if (E.mode == INSERT_MODE){
+        switch (c) {
+            case '\r': // enter key 
+                EditorInsertNewLine(E);
+                break;
+            // case 'h':
+            case ARROW_LEFT:
+            // case 'l':
+            case ARROW_RIGHT:
+            // case 'k':
+            case ARROW_UP:
+            // case 'j':
+            case ARROW_DOWN:
+                EditorMoveCursor(E,c);
+                break;
+            case PAGE_UP:
+            case PAGE_DOWN:
+                if (c == PAGE_UP){
+                    E.cy = E.rowoff;
+                    break;
+                } else if (c == PAGE_DOWN){
+                    E.cy = E.rowoff + E.screenrows -1;
+                    break;
+                }
+            case HOME_KEY:
+                E.cx = 0;
+                break;
+            case END_KEY:
+                E.cx = E.rows[E.cy].length();
+                break;
+            case BACKSPACE:
+            case DEL_KEY:
+                EditorDelChar(E);
+                break;
+            default:
+                if(!iscntrl(c) || c == '\t'){ // allows user to type in the editor
+                    EditorInsertChar(E,c);
+                }
+                break;
         }
-        break;
     }
     if (c != CTRL_KEY('q') && c != '\x1b') { 
         quit_times = 3;
@@ -493,6 +637,8 @@ void Editor(EditorConfig& E){ // initializing the editor
     E.rowoff = 0;
     E.coloff = 0;
     E.dirty = 0;
+    E.mode = NORMAL_MODE;
+    E.readonly = false;
     if (GetWindowSize( &E.screenrows, &E.screencols) == -1){
         die("GetWindowSize");
     }
