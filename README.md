@@ -25,4 +25,13 @@ yora [filename]
 | -------------- | --------------- |
 | Ctrl-Q | Quit the editor |
 | Ctrl-S | Save the changes |
+| Ctrl-F | Find in file |
+|   i    | enter insert mode |
+|  esc   | enter normal mode |
 | Arrow keys | Move around the editor |
+
+### Other options to move around the file 
+Run the tutor to learh how to navigate using the editor
+```
+yora -t
+```
